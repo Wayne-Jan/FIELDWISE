@@ -1,0 +1,6 @@
+outputs/
+__pycache__/
+*.pyc
+out/
+fieldwise_tainan_demo_v1/
+fieldwise_tainan_demo_v1.tar.gz

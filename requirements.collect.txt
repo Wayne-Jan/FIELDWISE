@@ -1,0 +1,6 @@
+-r requirements.txt
+earthengine-api==1.7.42
+rasterio==1.4.4
+pyproj==3.7.2
+pysheds==0.5
+requests==2.34.2

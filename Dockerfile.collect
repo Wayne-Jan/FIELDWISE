@@ -1,0 +1,7 @@
+# Build the quick-start image first: docker build -t fieldwise .
+FROM fieldwise
+# rasterio wheels need libexpat, which python:3.11-slim lacks
+RUN apt-get update && apt-get install -y --no-install-recommends libexpat1 && rm -rf /var/lib/apt/lists/*
+COPY requirements.collect.txt requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.collect.txt
+COPY . .
