@@ -150,6 +150,12 @@ information available at the decision.
 
 The Base architecture and the four foundation models are fixed in this release. Fit one crop at a time.
 
+## AI use
+
+The code and documentation in this repository were written with the assistance of AI coding tools, Claude Code
+(Anthropic) and Codex (OpenAI). The authors designed the method, reviewed and tested the code, and take
+responsibility for its content.
+
 ## Citation and data
 
 The paper, *FieldWise: Explanation fidelity and decision value in residual correction of subfield crop yield
