@@ -1,0 +1,58 @@
+# Encoding image (Build from public data, step 3): the four foundation models with the code and weights used for FieldWise,
+# downloaded from their official sources at fixed versions and checked against SHA-256. A GPU is recommended.
+#   docker build -f Dockerfile.encode -t fieldwise-encode .
+# The models keep their own licences: TESSERA code MIT, weights CC0; Galileo and Presto MIT; OlmoEarth under the OlmoEarth
+# Artifact License (use restrictions in README, Foundation models).
+FROM pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
+# Package versions of the environment that produced the FieldWise encodings; xarray is imported by Presto's model module
+RUN pip install --no-cache-dir numpy==2.2.6 pandas==2.3.3 pyarrow==21.0.0 scipy==1.16.2 einops==0.8.1 \
+        huggingface_hub==0.35.3 universal-pathlib==0.2.6 tqdm==4.67.1 \
+    && pip install --no-cache-dir --no-deps xarray==2024.3.0
+WORKDIR /opt/fm
+
+# TESSERA v2 student (nano): ucam-eo/tessera, weights geotessera/TESSERA-V-2.0-2B-N
+RUN set -e; mkdir -p tessera; \
+    for f in __init__.py model.py infer.py; do \
+      curl -fsSL --retry 3 -o tessera/$f https://raw.githubusercontent.com/ucam-eo/tessera/e368539f7c4711e5f16fdd09801573830e34baf9/tessera_infer_v2/student/$f; done; \
+    curl -fsSL --retry 3 -o tessera/student_nano.pt https://huggingface.co/geotessera/TESSERA-V-2.0-2B-N/resolve/bd08c90bf56ca6a1e7609a395cd47115fa12f1d8/ckpt/student_nano.pt; \
+    echo "bc9929e3643dfab2744c2ce14e7c14f698703a94e9562e4e0982f9d6540b0691  tessera/student_nano.pt" | sha256sum -c -
+
+# Galileo (nano): nasaharvest/galileo code and weights; normalization.json is placed next to single_file_galileo.py
+RUN set -e; mkdir -p galileo galileo_models/nano; \
+    curl -fsSL --retry 3 -o galileo/single_file_galileo.py https://raw.githubusercontent.com/nasaharvest/galileo/0f0b5b95ac81acef4b74cf4686dc877202f4541b/single_file_galileo.py; \
+    curl -fsSL --retry 3 -o galileo/normalization.json https://raw.githubusercontent.com/nasaharvest/galileo/0f0b5b95ac81acef4b74cf4686dc877202f4541b/config/normalization.json; \
+    for f in config.json encoder.pt; do \
+      curl -fsSL --retry 3 -o galileo_models/nano/$f https://huggingface.co/nasaharvest/galileo/resolve/f039dd5dde966a931baeda47eb680fa89b253e4e/models/nano/$f; done; \
+    printf '%s\n' \
+      "a94a2c1ee6ce541a2b09dcdaab6b5b3bd4edbee6b0108aa8a01bfe7a6395888d  galileo/single_file_galileo.py" \
+      "baea3828a8750e0b570cb2fad5cd30bb249f1f001988d842cc4246860e799ff3  galileo/normalization.json" \
+      "026d7bffd61ddf5c69cc7b173dccab01a2a55e1ea511fe3b34409e33a711daa9  galileo_models/nano/config.json" \
+      "eab6acacf527886a508a555bc24efe4b4a2cf91b162e84cd1c4a1807e942180c  galileo_models/nano/encoder.pt" | sha256sum -c -
+
+# OlmoEarth v1.2 (nano): allenai/olmoearth_pretrain, weights allenai/OlmoEarth-v1_2-Nano
+RUN set -e; mkdir -p olmoearth OlmoEarth-v1_2-Nano; \
+    curl -fsSL --retry 3 https://codeload.github.com/allenai/olmoearth_pretrain/tar.gz/db13d682348ee894c3355b52c4ab03f1fe4adfa7 \
+      | tar xz --strip-components=1 -C olmoearth; \
+    for f in config.json weights.pth LICENSE.txt; do \
+      curl -fsSL --retry 3 -o OlmoEarth-v1_2-Nano/$f https://huggingface.co/allenai/OlmoEarth-v1_2-Nano/resolve/e1f693ae2a7d5b57871a978e9d09e22d05206747/$f; done; \
+    printf '%s\n' \
+      "4cd2888e79dc543f262cc3d86fcd30d667068fd53a728ca5bd306d5ddb509d1d  OlmoEarth-v1_2-Nano/config.json" \
+      "2773fca48c238d78adde5e83b7d140a63d36c9e5f73746b8dbadaed743020378  OlmoEarth-v1_2-Nano/weights.pth" | sha256sum -c -
+
+# Presto (default): nasaharvest/presto, weights in the repository (data/default_model.pt)
+RUN set -e; mkdir -p presto; \
+    curl -fsSL --retry 3 https://codeload.github.com/nasaharvest/presto/tar.gz/ba88a3f9d306ea30b90fe2f1284d98f423487cfa \
+      | tar xz --strip-components=1 -C presto; \
+    echo "559c9d76f525bdf2dd3774da8b1e7f1510769b73baacac12e9e4d8d5c67fbe65  presto/data/default_model.pt" | sha256sum -c -
+
+# Model locations for fieldwise.collect.encode (fields of fieldwise.fm.encode.ModelPaths)
+RUN printf '%s\n' '{' \
+      '"tessera_code": "/opt/fm/tessera", "tessera_weights": "/opt/fm/tessera/student_nano.pt",' \
+      '"galileo_code": "/opt/fm/galileo", "galileo_model": "/opt/fm/galileo_models",' \
+      '"olmoearth_code": "/opt/fm/olmoearth", "olmoearth_model": "/opt/fm/OlmoEarth-v1_2-Nano",' \
+      '"presto_code": "/opt/fm/presto", "presto_weights": "/opt/fm/presto/data/default_model.pt"' '}' > paths.json
+
+WORKDIR /workspace/FIELDWISE
+COPY . .

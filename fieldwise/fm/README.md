@@ -1,8 +1,9 @@
 # Foundation-model inputs
 
 `views.py` builds the input of each foundation model for one field and one observation window; `encode.py` runs the
-frozen encoders. The model code and weights are not distributed here: install them from the official sources under their
-own licences and pass their locations with `encode.ModelPaths`.
+frozen encoders. The model code and weights are not distributed here: `Dockerfile.encode` downloads the versions used for
+FieldWise from the official sources (README, Foundation models); other installations pass their locations with
+`encode.ModelPaths`.
 
 | Model | Products | Time steps |
 |---|---|---|
@@ -26,5 +27,5 @@ observations in `start <= t < end` that are available (time plus latency) by `de
 | `product('terraclimate', fid)` | monthly `values` [months, bands] (physical units), `valid`, `time_start_ms`, `time_end_ms`, `bands` |
 | `static(fid)` | `terrain_elevation_m`, `terrain_slope_rise` per pixel |
 
-`examples/taiwan/reader.py` implements this interface on products extracted from Google Earth Engine and Microsoft
+`fieldwise/collect/reader.py` implements this interface on products extracted from Google Earth Engine and Microsoft
 Planetary Computer.

@@ -2,8 +2,8 @@
 
 For one field, one window (start, end E, decision C) and a chunk of service pixels, builds the input of each foundation model
 (bands, units, time steps, compositing, group masks) before the official normalisation. Data come through a reader D with
-the methods pixels, s2, s1_rtc, image, weather, product, static and manifest (see fieldwise/fm/README.md; the Taiwan
-example implements it). Official sources (checked 2026-10-10):
+the methods pixels, s2, s1_rtc, image, weather, product, static and manifest (see fieldwise/fm/README.md;
+fieldwise/collect/reader.py implements it). Official sources (checked 2026-10-10):
 
   TESSERA v2 student  vendored tessera_infer_v2.encode_pixels: every clear S2 L2A acquisition (harmonised DN, SCL not in
                       {0,1,2,3,8,9}, 10 bands) with its day of year; S1 ascending and descending kept apart, official int16 scale
