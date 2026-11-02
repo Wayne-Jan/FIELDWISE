@@ -1,8 +1,8 @@
-# Encoding image (Build from public data, step 3): the four foundation models with the code and weights used for FieldWise,
+# Encoding image (README, Build your own, step 3): the four foundation models with the code and weights used for FieldWise,
 # downloaded from their official sources at fixed versions and checked against SHA-256. A GPU is recommended.
 #   docker build -f Dockerfile.encode -t fieldwise-encode .
 # The models keep their own licences: TESSERA code MIT, weights CC0; Galileo and Presto MIT; OlmoEarth under the OlmoEarth
-# Artifact License (use restrictions in README, Foundation models).
+# Artifact License (use restrictions in docs/FOUNDATION_MODELS.md).
 FROM pytorch/pytorch:2.9.0-cuda12.8-cudnn9-runtime
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
 RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*

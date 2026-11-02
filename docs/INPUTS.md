@@ -65,11 +65,8 @@ and the functions take no crop argument. If your tables carry a `crop` column, t
 | Input statistics | Computed only from inputs available by the cutoff: the daily-weather standardisation uses the days available by the cutoff, the RPT initial scale the embeddings of cases decided by the cutoff, and the retrieval standardisation the candidates decided by the earliest query decision of the stage and year |
 | Within the history | Field-seasons weigh equally within a year and years equally |
 
-The input-statistics row is stricter than the code that produced the manuscript results: there, the daily-weather
-standardisation and the RPT initial scale used all earlier-year field-seasons, and the retrieval standardisation all
-earlier-year candidates of the stage. The difference concerns wheat 2018–2021 only, where a few earlier-year
-field-seasons were decided after the cutoff. For the retrieval standardisation it leaves every reference list and weight
-of the study unchanged.
+The manuscript code computed the retrieval standardisation from all earlier-year candidates of the stage; this leaves
+every reference list and weight unchanged.
 
 ## 4. Case table
 
@@ -192,3 +189,25 @@ harvest). A missing window is NaN. Each foundation model has its own readout; Fi
 | `validate.embeddings` | Contiguous embedding rows, one per service pixel |
 
 `validate.assert_valid(...)` raises on errors and returns the warnings.
+
+## 12. Tutorial files
+
+What you provide to `fieldwise.collect` and `fieldwise.tutorial`:
+
+| Input | Format |
+|---|---|
+| Field boundaries on a 10 m grid | `FIELDS.json` (`x0`, `y1`, `w`, `h`, `crs`) and `PIXELS.parquet` (`field`, `row`, `col`, `lon`, `lat`) |
+| Season dates | `FIELDS.parquet` (`field`, `n_pix`, `sow_day`, `harvest_day` as UTC day numbers) |
+| Crop | maize, soybean or wheat settings (`docs/DATA_COLLECTION.md`, decision times) |
+| Yield maps of earlier seasons (optional) | npz with `target` (t/ha) and `gt_valid` per pixel, in the pixel order of the seasons given (as `out/run/yield_history.npz`); pass with `--labels <file>` to `fieldwise.tutorial.run` |
+
+What each step writes:
+
+| Step | Output |
+|---|---|
+| `fieldwise.collect` | Decision times and cases (`<season>/collect/base_inputs/CASES.parquet`), inputs from public products |
+| `fieldwise.collect.encode` | `<season>/encode/`: TESSERA per-pixel embeddings, field means of the four foundation models |
+| `fieldwise.tutorial.run` | `out/run/model/`: Base model, RPT projection, G, K, readouts, strengths and alpha of the new season; `out/run/rpt_database/`: per-pixel residuals, embeddings, field descriptors and coordinates of the earlier seasons; `out/run/pixels.parquet`, `cases.parquet`, `RUN.json`: out-of-sample predictions of every season, per-year choices and the evaluation; synthetic yields when `--labels` is not given |
+| `fieldwise.tutorial.infer` | `out/new/pixels.parquet`: Base, within-field correction S15, Correction only, FieldWise, lon, lat per pixel; `out/new/cases.parquet`, `references.parquet`: G, K, readouts, offsets, reference fields and weights per field |
+
+The Base architecture and the four foundation models are fixed in this release. Fit one crop at a time.

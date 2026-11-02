@@ -2,9 +2,9 @@
 
 FieldWise needs, for every field, a 10 m pixel grid, sowing and harvest dates, and public Earth-observation, weather,
 soil and terrain products. Yield maps are needed only to fit or evaluate models and to enable within-field correction
-(RPT) with your own reference fields. This page lists every product, where it comes from and how it is used. The package
-does not include download scripts; `docs/INPUTS.md` defines the prepared inputs, their units and timing rules, and
-`fieldwise/validate.py` checks them.
+(RPT) with your own reference fields. This page lists every product, where it comes from and how it is used;
+`fieldwise.collect` downloads them (README, Build your own). `docs/INPUTS.md` defines the prepared inputs, their
+units and timing rules, and `fieldwise/validate.py` checks them.
 
 ## 1. Fields and service pixels
 
@@ -75,7 +75,7 @@ Yield maps let you fit models for your region and turn on within-field correctio
   seasons.
 
 YieldSAT (Miranda et al., 2026) provides such maps for Argentina, Brazil, Uruguay and Germany under its own licence; request
-access at https://yieldsat.github.io/. The data are not included in this repository.
+access at https://yieldsat.github.io/.
 
 ## 5. Attribution
 

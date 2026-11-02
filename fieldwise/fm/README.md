@@ -1,9 +1,8 @@
 # Foundation-model inputs
 
 `views.py` builds the input of each foundation model for one field and one observation window; `encode.py` runs the
-frozen encoders. The model code and weights are not distributed here: `Dockerfile.encode` downloads the versions used for
-FieldWise from the official sources (README, Foundation models); other installations pass their locations with
-`encode.ModelPaths`.
+frozen encoders. `Dockerfile.encode` installs the official code and weights at the versions used for FieldWise
+(docs/FOUNDATION_MODELS.md); other installations pass their locations with `encode.ModelPaths`.
 
 | Model | Products | Time steps |
 |---|---|---|

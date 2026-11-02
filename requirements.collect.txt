@@ -4,3 +4,6 @@ rasterio==1.4.4
 pyproj==3.7.2
 pysheds==0.5
 requests==2.34.2
+geopandas==1.2.0
+shapely==2.2.0
+pyogrio==0.13.0
