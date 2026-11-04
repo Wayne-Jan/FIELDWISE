@@ -2,10 +2,14 @@
 
 A case is one field-season observed up to a window end. Its inputs:
   s2:      [pixels, steps, 12] harmonised reflectance (float32), scl: [pixels, steps] scene classes, ok: [pixels, steps] valid
-           observation (all 12 bands found and valid), day: [steps] day numbers;
-  weather: [days, 4] daily mean, max, min air temperature (K) and precipitation (m), weather_day: [days] day numbers;
+           observation (all 12 bands found and valid), day: [steps] UTC day numbers;
+  weather: [days, 4] daily mean, max, min air temperature (K) and precipitation (m), weather_day: [days] UTC day numbers;
+  input_start_day: UTC day number of the field-season input start (CASES.input_start_utc_ms), the same for every decision
+           time of the field-season;
   pix0:    index of the field's first pixel in the static arrays (soil [P, 24], dem [P, 5], target [P], gt_valid [P]).
-Invalid steps get date DATE_PAD and are masked in the temporal encoders; masked values are -1 after standardisation.
+UTC day numbers count days since 1970-01-01. The Transformer batch gives the Sentinel-2 and weather dates as days since
+input_start_day; the 3D-LSTM date features use the UTC day numbers. Invalid steps get date DATE_PAD and are masked in the
+temporal encoders; masked values are -1 after standardisation.
 """
 import numpy as np
 import torch
@@ -20,6 +24,7 @@ class PixelData:
         vals, scl, ok, day, s_start, s_len, s_case, s_pix, w_list = [], [], [], [], [], [], [], [], []
         n = 0
         self.case_ids = [c['case_id'] for c in cases]
+        self.start_day = torch.tensor([int(c['input_start_day']) for c in cases], dtype=torch.int32, device=device)
         for ci, c in enumerate(cases):
             raw, sc, k, d = c['s2'], c['scl'], c['ok'], c['day']
             n_pix = raw.shape[0]
@@ -95,7 +100,11 @@ def fit_stats(p, sel=None, chunk=1 << 24):
 
 
 def batch(p, idx, st):
-    """Transformer batch for samples idx, padded to the longest sample."""
+    """Transformer batch for samples idx, padded to the longest sample.
+
+    Sentinel-2 and weather dates are days since the input start of the sample's field-season (the same origin at every
+    decision time); invalid steps and days are DATE_PAD.
+    """
     L = max(int(p.s_len[idx].max().item()) if len(idx) else 0, 1)
     ar = torch.arange(L, device=p.vals.device)
     inside = ar[None, :] < p.s_len[idx][:, None]
@@ -106,11 +115,13 @@ def batch(p, idx, st):
     scl = torch.where(inside, p.scl[g].long() if len(p.ok) else torch.full_like(ar[None].expand(len(idx), L), SCL_PAD), SCL_PAD)
     scl = torch.where(ok, scl, SCL_PAD)
     oh = torch.nn.functional.one_hot(scl.clamp(0, SCL_PAD), SCL_PAD + 1).float()
-    day = p.day[g].float() if len(p.ok) else torch.zeros(len(idx), L, device=ar.device)
-    dates = torch.where(ok, day, torch.full_like(day, DATE_PAD))
     c = p.s_case[idx]
+    start = p.start_day[c][:, None]
+    day = (p.day[g] - start).float() if len(p.ok) else torch.zeros(len(idx), L, device=ar.device)
+    dates = torch.where(ok, day, torch.full_like(day, DATE_PAD))
     wv = (p.wv[c] - st['wx'][0]) / st['wx'][1]
     wd = p.wd[c]
+    wd = torch.where(wd != DATE_PAD, wd - start.float(), wd)
     wv = torch.where((wd != DATE_PAD)[..., None], torch.nan_to_num(wv, nan=-1.0), torch.full_like(wv, -1.0))
     soil = torch.nan_to_num((p.soil[p.s_pix[idx]] - st['soil'][0]) / st['soil'][1], nan=0.0)
     dem = torch.nan_to_num((p.dem[p.s_pix[idx]] - st['dem'][0]) / st['dem'][1], nan=0.0)

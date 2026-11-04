@@ -3,7 +3,8 @@
 One model per crop, target year and seed is trained on whole seasons of the legal history and early-stopped on a
 field-level development split; the best checkpoint is kept without refitting. Recipe: AdamW (learning rate 1e-3, weight
 decay 0.02), batch 2,048, gradient clipping at 1, at most 55 epochs with 10% linear warm-up and cosine decay, four
-validation checks per epoch plus one at the epoch end, patience 12 checks, BF16 autocast on GPU and FP32 validation.
+validation checks per epoch plus one at the epoch end, patience 12 checks. Training uses BF16 autocast on GPU, with the
+Transformer date encoding and the 3D-LSTM recurrent layers in FP32; validation and prediction run in FP32.
 """
 import json
 import math

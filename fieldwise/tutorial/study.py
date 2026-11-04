@@ -61,7 +61,7 @@ class Season:
         return dict(case_id=c.case_id, pix0=int(gpix0), s2=raw.astype(np.float32) + off[int(c.i0):int(c.i1)][None, :, None],
                     scl=np.asarray(self.S[sl]).reshape(n_pix, L)[:, a:b], ok=np.asarray(self.K[sl]).reshape(n_pix, L)[:, a:b],
                     day=day[int(c.i0):int(c.i1)].astype(np.int32), weather=self.w_val[ws + int(c.w0):ws + int(c.w1)],
-                    weather_day=self.w_day[ws + int(c.w0):ws + int(c.w1)])
+                    weather_day=self.w_day[ws + int(c.w0):ws + int(c.w1)], input_start_day=int(c.input_start_utc_ms) // DAY_MS)
 
 
 class Study:
