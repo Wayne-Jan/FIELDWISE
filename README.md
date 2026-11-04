@@ -16,7 +16,7 @@ decision τ4 (2023, Transformer Base). Clocks mark components fitted on earlier 
 
 FieldWise adds two corrections to a Base prediction: a **within-field correction** β·S15, transferred from the residual
 maps of similar earlier fields (residual pattern transfer, RPT), and a **field-mean correction** u, chosen by a decision
-layer from an environmental offset G, a calibration offset K and residual readouts of four Earth-observation foundation
+layer from an environmental offset G, a calibration offset Cal (K in the equations) and residual readouts of four Earth-observation foundation
 models. Every part is fitted on earlier seasons only.
 
 | Panel | Step | Code |
