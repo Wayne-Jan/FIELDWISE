@@ -1,8 +1,9 @@
 """Base yield models: a multimodal Transformer and a 3D-LSTM over the same four input modalities.
 
 Transformer (after Najjar et al., 2025): Sentinel-2 (12 bands + 13 scene-class channels) and daily weather (4 channels) each
-pass a temporal Transformer (sinusoidal dates, learned regression token, four one-head layers); soil (24) and terrain (5)
-pass small MLPs; the four 32-dimensional outputs feed a linear regression.
+pass a temporal Transformer (sinusoidal encoding of the days since the field-season input start, computed in FP32; learned
+regression token; four one-head layers); soil (24) and terrain (5) pass small MLPs; the four 32-dimensional outputs feed a
+linear regression.
 3D-LSTM: per valid Sentinel-2 step the 5 x 5 same-field neighbourhood of the 12 bands (300 values) is projected to 64
 features, joined with the scene class and date features and passed to a two-layer LSTM; weather goes through a one-layer
 LSTM once per case; soil and terrain through a linear layer; the last valid states feed an MLP head.
@@ -19,11 +20,17 @@ from .data import DATE_PAD, NB, SCL_PAD
 
 # ---------------------------------------------------------------------------------------------------------- Transformer
 def date_encoding(embed_dim, pos, omega=None):
-    pos = torch.where(pos == DATE_PAD, torch.zeros_like(pos), pos)
-    if omega is None:
-        omega = 1.0 / (10000 ** (torch.arange(embed_dim // 2, device=pos.device, dtype=torch.float32) / (embed_dim / 2.0)))
-    out = torch.einsum('bt,d->btd', pos, omega.to(device=pos.device))
-    return torch.cat([torch.sin(out), torch.cos(out)], dim=-1)
+    """[batch, steps, embed_dim] sine and cosine of the dates pos [batch, steps] (days, DATE_PAD -> 0) times the frequencies.
+
+    The frequency products, sine and cosine are computed in FP32 with autocast disabled, in training and inference alike.
+    """
+    with torch.autocast(device_type=pos.device.type, enabled=False):
+        pos = pos.float()
+        pos = torch.where(pos == DATE_PAD, torch.zeros_like(pos), pos)
+        if omega is None:
+            omega = 1.0 / (10000 ** (torch.arange(embed_dim // 2, device=pos.device, dtype=torch.float32) / (embed_dim / 2.0)))
+        out = torch.einsum('bt,d->btd', pos, omega.to(device=pos.device, dtype=torch.float32))
+        return torch.cat([torch.sin(out), torch.cos(out)], dim=-1)
 
 
 class TransformerLayer(nn.Module):

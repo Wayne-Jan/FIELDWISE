@@ -9,22 +9,23 @@ performance on YieldSAT.
 
 ## How it works
 
-![Fig. 1 of the manuscript](docs/images/figure1.png)
+![Fig. 3 of the manuscript](docs/images/figure3.png)
 
-*Fig. 1 of the manuscript: a soybean field-season from YieldSAT (Miranda et al., 2026) at the fourth in-season decision.*
+*Fig. 3 of the manuscript: FieldWise on a maize field-season from YieldSAT (Miranda et al., 2026) at the fourth in-season
+decision τ4 (2023, Transformer Base). Clocks mark components fitted on earlier seasons.*
 
 FieldWise adds two corrections to a Base prediction: a **within-field correction** β·S15, transferred from the residual
 maps of similar earlier fields (residual pattern transfer, RPT), and a **field-mean correction** u, chosen by a decision
-layer from an environmental offset G, a calibration offset K and residual readouts of four Earth-observation foundation
+layer from an environmental offset G, a calibration offset Cal (K in the equations) and residual readouts of four Earth-observation foundation
 models. Every part is fitted on earlier seasons only.
 
 | Panel | Step | Code |
 |---|---|---|
-| A | Base predictions and historical residuals | `fieldwise/base/` |
-| B | Decision times and the information available at each | `fieldwise/schedule.py` |
-| C | Reference fields, pixel match, within-field correction S15 | `fieldwise/retrieval.py`, `fieldwise/rpt.py` |
-| D | G, K, readouts and the decision layer | `environment.py`, `calibration.py`, `readout.py`, `decision.py` in `fieldwise/` |
-| E | Base + β·S15 + u | `fieldwise/tutorial/infer.py` |
+| A | Base model (Transformer or 3D-LSTM) and the residuals of earlier seasons | `fieldwise/base/` |
+| B | Information available by each decision time; earlier-season yield labels enter 30 days after harvest | `fieldwise/schedule.py` |
+| C | Within-field correction by RPT: similar earlier fields, learned pixel match, 15 m smoothing (S15) | `fieldwise/retrieval.py`, `fieldwise/rpt.py` |
+| D | Field-mean correction: environmental (G) and calibration (Cal) offsets, foundation-model readouts and the decision layer | `environment.py`, `calibration.py`, `readout.py`, `decision.py` in `fieldwise/` |
+| E | FieldWise prediction: Base + β·S15 + u | `fieldwise/tutorial/infer.py` |
 
 `fieldwise/explain/` holds the explanation analyses of the manuscript.
 
