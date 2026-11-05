@@ -31,8 +31,8 @@ models. Every part is fitted on earlier seasons only.
 
 ## Quick start
 
-Needs Docker; runs on CPU. The demo inputs are seven seasons (2019/20–2025/26) of 10 areas near Tainan, Taiwan; the last
-season is the new one.
+Needs Docker and an NVIDIA GPU with the NVIDIA Container Toolkit. The demo inputs are seven seasons (2019/20–2025/26) of
+10 areas near Tainan, Taiwan; the last season is the new one. The three steps take about 3.5 minutes on one NVIDIA TITAN RTX.
 
 ```bash
 git clone https://github.com/Wayne-Jan/FIELDWISE.git && cd FIELDWISE
@@ -44,7 +44,7 @@ curl -LO https://github.com/Wayne-Jan/FIELDWISE/releases/download/demo-data-v1/f
 tar -xzf fieldwise_tainan_demo_v1.tar.gz
 mkdir -p out
 
-RUN="docker run --rm --init -v $PWD/fieldwise_tainan_demo_v1:/data:ro -v $PWD/out:/out fieldwise"
+RUN="docker run --rm --init --gpus all -v $PWD/fieldwise_tainan_demo_v1:/data:ro -v $PWD/out:/out fieldwise"
 SEASONS="/data/2019 /data/2020 /data/2021 /data/2022 /data/2023 /data/2024 /data/2025"
 
 # 1. fit: synthetic yields, Base, RPT database and corrections (the 2025/26 yields are held out)

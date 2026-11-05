@@ -178,8 +178,7 @@ def main():
         r, models = readout.readouts(X, b7, means, np.full(len(X), 2), X.rbar.to_numpy(), cutoff=cut)
         rh.append(r)
         ro_models[fm] = {s: m for (s, T), m in models.items() if T == a.target}
-    with np.errstate(all='ignore'):
-        rhat = np.nanmean(np.column_stack(rh), 1)
+    rhat = readout.mean_readout(np.column_stack(rh))
     ok = (X.n > 0).to_numpy()
     choice, _ = strength.select_strengths(lab, m6[ok], G[ok], Cal[ok], cutoff=cut, targets=years)
     gamma, beta, kappa = (X.year.map({T: v[i] for T, v in choice.items()}).to_numpy(float) for i in range(3))

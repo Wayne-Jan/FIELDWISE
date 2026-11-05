@@ -70,8 +70,7 @@ def main():
         for s, m in M['readouts'][fm].items():
             q = (X.stage == s).to_numpy()
             rh[q, j] = m.predict(b7[q], (first_only if s == STAGES[0] else full)[q])
-    with np.errstate(all='ignore'):
-        rhat = np.nanmean(rh, 1)
+    rhat = readout.mean_readout(rh)
     k = cfg['strengths']
     U, c = decision.offsets(rhat, G, Cal, np.full(n, k['gamma']), np.full(n, k['kappa']))
     u = U[:, int(np.flatnonzero(np.isclose(decision.ALPHAS, cfg['alpha']))[0])]
