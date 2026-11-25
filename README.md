@@ -1,35 +1,42 @@
 <p align="center"><img src="docs/images/logo.png" alt="FieldWise" width="420"></p>
 
 **FieldWise corrects pixel-level crop yield predictions for a new season before harvest—without retraining the base
-model—using within-field residual patterns and field-wide offsets learned strictly from earlier seasons.**
+model—using within-field residual patterns and field-wide offsets learned from earlier seasons whose harvest labels are
+already available by the decision time.**
 
 This repository provides (1) a direct Python API (`fieldwise.correct_pixels`) for applying FieldWise to **any
 pixel-level dataset**, (2) the full Base training and Earth-observation pipeline (supporting both **truncated-season**
 and **whole-season** training), and (3) the **explainability and decision-value diagnostics** (`fieldwise.explain`)
 reported in the FieldWise manuscript (Chan and Yang, under review).
 
+![Fig. 1 of the manuscript](docs/images/figure1.png)
+
+*Fig. 1 of the manuscript: Conceptual overview of FieldWise two-scale post-hoc correction of a preharvest yield map
+(wheat, Argentina, 2023, τ2). The base forecast uses satellite and weather observations up to the cutoff; reference
+fields contribute residuals only if their harvest labels were available by the forecast date.*
+
 ## How it works
 
 ![Fig. 4 of the manuscript](docs/images/figure4.png)
 
-*Fig. 4 of the manuscript: FieldWise on a wheat field-season from YieldSAT (Miranda et al., 2026) at the third in-season
-decision τ3 (2023, Transformer Base, truncated-season training). Clock icons mark components fitted strictly on earlier
-seasons.*
+*Fig. 4 of the manuscript: FieldWise workflow on an illustrative wheat field-season from YieldSAT (Miranda et al., 2026)
+at the third in-season decision τ3 (Argentina, 2023-11-10, Transformer Base, truncated-season training). Clock icons mark
+components fitted on earlier seasons.*
 
 FieldWise adds two scale-separated corrections to any pixel-level Base prediction:
 - a **within-field correction** β·S15, transferred from the residual maps of similar earlier fields via pixel-to-pixel
   matching and 15 m smoothing (residual pattern transfer, RPT), and
-- a **field-wide offset** u, chosen by a shrinkage decision layer from an environmental offset G, a linear calibration
-  offset Cal (K in the equations) and residual readouts of four Earth-observation foundation models.
+- a **field-wide offset** u, chosen by a shrinkage–reweighting decision layer from an environmental offset G, a linear
+  calibration offset Cal (K in the equations) and residual readouts of four Earth-observation foundation models.
 
-Every component is fitted strictly on earlier seasons whose harvest labels are already available by the decision time.
+Every component is fitted only on earlier seasons whose harvest labels are already available by the decision time.
 
 | Panel | Step | Code |
 |---|---|---|
 | A | Base model (Transformer or 3D-LSTM; truncated-season or whole-season training) and earlier-season residuals | `fieldwise/base/` (`truncation.py`, `train.py`) |
-| B | Causal timing schedule: earlier-season yield labels enter 30 days after harvest | `fieldwise/schedule.py`, `fieldwise/selection.py` |
+| B | Timing and label-availability schedule: observations end at the cutoff; earlier-season yield labels are assumed available 30 days after harvest | `fieldwise/schedule.py`, `fieldwise/selection.py` |
 | C | Within-field correction (RPT): reference-field retrieval, learned pixel matching, 15 m smoothing (S15) | `fieldwise/retrieval.py`, `fieldwise/rpt.py` |
-| D | Field-wide offset: environmental (G) and calibration (Cal) offsets, foundation-model readouts and shrinkage decision layer | `environment.py`, `calibration.py`, `readout.py`, `decision.py` |
+| D | Field-wide offset: environmental (G) and calibration (Cal) offsets, foundation-model readouts and shrinkage–reweighting decision layer | `environment.py`, `calibration.py`, `readout.py`, `decision.py` |
 | E | Final pixel-level prediction: `Base + β·S15 + u` (vs. `Correction only = Base + β·S15 + c`) | `fieldwise/pipeline.py`, `fieldwise/tutorial/infer.py` |
 
 ## Use directly with your own pixel-level data
@@ -52,7 +59,7 @@ pixels = pd.read_parquet("my_pixels.parquet")
 # emb: [N_pixels, D] array aligned with pixels (foundation-model embeddings or pixel-level spectral/temporal features)
 emb = np.load("my_pixel_embeddings.npy")
 
-# Runs strictly causal rolling retrieval -> RPT -> calibration -> forward strength selection
+# Runs rolling temporal retrieval -> RPT -> calibration -> forward strength selection
 # (pass G=... and rhat=... to include environmental offsets and foundation-model readouts)
 res = fieldwise.correct_pixels(pixels, emb, k=50, radius=15.0, device="cuda")
 
@@ -62,8 +69,9 @@ print(res.pixels[["case_id", "pred_base", "within_field", "field_offset", "pred_
 print("Selected strengths per year:", res.choices)
 ```
 
-> **Causal guarantee:** Target year `T` only ever uses labelled reference fields from years `< T` (enforced by
-> `fieldwise/selection.py` and verified by `tests/test_pipeline.py` and `tests/test_leakage.py`).
+> **Temporal-legality guarantee:** Target year `T` only ever uses labelled reference fields from years `< T` whose
+> harvest labels are available by the decision time (enforced by `fieldwise/selection.py` and verified by
+> `tests/test_pipeline.py` and `tests/test_leakage.py`).
 
 ## Explainability and decision diagnostics
 
@@ -153,9 +161,9 @@ Table formats and the timing rules that keep every fit to information available 
 
 ## Citation, data and licences
 
-- **Paper:** *FieldWise: Explanation fidelity and decision value in residual correction of subfield crop yield
-  predictions* (Chan and Yang), under review; its citation will be added upon publication. To cite the software, see
-  `CITATION.cff`.
+- **Paper:** *FieldWise: Two-scale post-hoc residual correction, explanation fidelity, and decision value in preharvest
+  subfield yield forecasting* (Chan and Yang), under review; its citation will be added upon publication. To cite the
+  software, see `CITATION.cff`.
 - **Data:** the manuscript's experiments use YieldSAT (Miranda et al., 2026), available from DFKI at
   https://yieldsat.github.io/.
 - **Foundation models:** please cite TESSERA (Feng et al., 2026), Galileo (Tseng et al., 2025), OlmoEarth (Herzog et al.,
