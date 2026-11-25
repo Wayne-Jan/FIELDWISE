@@ -6,7 +6,7 @@ from unittest import mock
 import numpy as np
 import torch
 
-from fieldwise.base import data as D
+from fieldwise.base import data as D, train as T, truncation as TR
 from fieldwise.base.models import batch3d, date_encoding
 
 START = 19_400                                          # UTC day number of the field-season input start
@@ -81,6 +81,44 @@ class TestSeasonDates(unittest.TestCase):
         np.testing.assert_allclose(f[:, 0], np.sin(2 * math.pi * d / 365.25), atol=1e-4)
         np.testing.assert_allclose(f[:, 1], np.cos(2 * math.pi * d / 365.25), atol=1e-4)
         np.testing.assert_allclose(f[:, 2], (d - d[0]) / 365.0, atol=1e-6)
+
+
+class TestRandomTruncation(unittest.TestCase):
+    def test_case_clock_truncates_s2_and_weather_without_mutating_source(self):
+        p = season_cases(n_pix=4, seed=7)
+        s_len_orig = p.s_len.clone()
+        wd_orig = p.wd.clone()
+        fit_idx = torch.arange(p.n)
+        lo = np.array([START + 10, START + 10], np.int64)
+        hi = np.array([START + 20, START + 30], np.int64)
+        clock = TR.CaseClock(p, fit_idx, lo, hi, date_pad=D.DATE_PAD)
+        # Explicit cutoff at START + 15: S2 days [2, 7, 12] stay (3 steps), weather days < START + 15 stay (15 days)
+        pv, info = clock.view(seed=42, epoch=1, W=np.array([START + 15, START + 15]))
+        self.assertEqual(info['cases'], 2)
+        self.assertTrue(bool((pv.s_len == 3).all()))
+        for c in range(2):
+            kept = pv.wd[c][pv.wd[c] != D.DATE_PAD]
+            self.assertEqual(len(kept), 15)
+            self.assertTrue(bool((kept < START + 15).all()))
+        # Original PixelData tensors remain untouched
+        torch.testing.assert_close(p.s_len, s_len_orig)
+        torch.testing.assert_close(p.wd, wd_orig)
+        # Deterministic per (seed, epoch)
+        np.testing.assert_array_equal(clock.cutoffs(42, 3), clock.cutoffs(42, 3))
+
+    def test_truncated_training_with_external_dev_pack(self):
+        p_tr = season_cases(n_pix=6, seed=1)
+        p_dev = season_cases(n_pix=4, seed=2)
+        fit_idx = torch.arange(p_tr.n)
+        dev_idx = torch.arange(p_dev.n)
+        clock = TR.CaseClock(p_tr, fit_idx, [START + 10, START + 10], [START + 20, START + 30], date_pad=D.DATE_PAD)
+        recipe = dict(T.RECIPE, epochs=2, batch=8, checks_per_epoch=1, patience=4)
+        model, st, hist, best = T.train_model('transformer', p_tr, fit_idx, dev_idx, seed=42, recipe=recipe,
+                                              trunc=clock, dev_pack=p_dev)
+        self.assertGreaterEqual(len(hist), 2)
+        self.assertTrue(all(math.isfinite(h['dev_mse_z']) for h in hist))
+        pred = T.predict(model, p_dev, dev_idx, st, D.batch)
+        self.assertTrue(bool(torch.isfinite(pred).all()))
 
 
 if __name__ == '__main__':

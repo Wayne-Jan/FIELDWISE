@@ -1,5 +1,5 @@
-"""Concept erasure with LEACE (Belrose et al., 2023) and matched random controls (manuscript Sections 4.6.3 and 4.7.3,
-Appendices C.3 and D.2).
+"""Concept erasure with LEACE (Belrose et al., 2023) and matched random controls (manuscript Sections 4.5 and 4.6,
+Appendix B.2, Figs. 9B and 11).
 
 LEACE. With weighted, centred features X and concept Z on the fitting rows, C = cov(X), S = cov(X, Z), whitening
 W = C^(-1/2) and U an orthonormal basis of the column space of W S, the erased features are X - (X - mu) W U U' W^(-1). After

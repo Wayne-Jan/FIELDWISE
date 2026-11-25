@@ -64,6 +64,32 @@ class TestSpatial(unittest.TestCase):
         self.assertAlmostEqual(spatial.edge_contrast(y, d, ok, case, 1)[0], -2.0)
         self.assertAlmostEqual(spatial.response_slope(y, 2 * y + 1, ok, case, 1)[0], 2.0)
 
+    def test_shuffle_and_reconstruction_metrics(self):
+        rng = np.random.default_rng(11)
+        n_cases, n_pix = 4, 30
+        case = np.repeat(np.arange(n_cases), n_pix)
+        valid = np.ones(n_cases * n_pix, bool)
+        r = rng.normal(0.0, 1.0, len(case))
+        r_shuf = spatial.shuffle_residuals(r, valid, case, rng)
+        for c in range(n_cases):
+            m = case == c
+            self.assertAlmostEqual(r[m].mean(), r_shuf[m].mean(), places=10)
+            np.testing.assert_array_equal(np.sort(r[m]), np.sort(r_shuf[m]))
+        # Reconstruction & retained benefit (within-field centered descriptors)
+        X = rng.normal(size=(len(case), 5))
+        Xc = X - np.repeat([X[case == c].mean(axis=0) for c in range(n_cases)], n_pix, axis=0)
+        s_orig = Xc @ np.array([0.8, -0.4, 0.2, 0.0, 0.1])
+        r_c = s_orig + rng.normal(0, 0.3, len(case))
+        r_c = r_c - np.repeat([r_c[case == c].mean() for c in range(n_cases)], n_pix)
+        s_rec = spatial.reconstruct_ridge(Xc, s_orig, Xc, alpha=1e-6)
+        s_rec = s_rec - np.repeat([s_rec[case == c].mean() for c in range(n_cases)], n_pix)
+        w = np.ones(n_cases) / n_cases
+        res_exact = spatial.retained_benefit(r_c, s_orig, s_rec, valid, case, w)
+        self.assertGreater(res_exact['r2_rec'], 0.999)
+        self.assertGreater(res_exact['retained_share'], 0.999)
+        res_zero = spatial.retained_benefit(r_c, s_orig, np.zeros_like(s_orig), valid, case, w)
+        self.assertAlmostEqual(res_zero['retained_share'], 0.0, places=10)
+
 
 class TestDecisions(unittest.TestCase):
     def test_loss_change_matches_shift_loss(self):

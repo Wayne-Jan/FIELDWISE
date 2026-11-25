@@ -1,4 +1,4 @@
-"""Predictive increments of field-mean readouts (manuscript Section 4.7.1, Appendix D.1).
+"""Predictive increments of field-mean readouts (manuscript Section 4.6, Appendix B.2, Fig. 10).
 
 A readout regresses the Base field-mean residual on blocks of features: the seven shared features (readout.py), optionally
 one FM block (readout.window_blocks) and optionally one named block (for example vegetation indices, LAI/FPAR, sowing

@@ -1,10 +1,11 @@
-"""Training and prediction of the Base models.
+"""Training and prediction of the Base models (manuscript Section 4.1, Fig. 3).
 
-One model per crop, target year and seed is trained on whole seasons of the legal history and early-stopped on a
-field-level development split; the best checkpoint is kept without refitting. Recipe: AdamW (learning rate 1e-3, weight
-decay 0.02), batch 2,048, gradient clipping at 1, at most 55 epochs with 10% linear warm-up and cosine decay, four
-validation checks per epoch plus one at the epoch end, patience 12 checks. Training uses BF16 autocast on GPU, with the
-Transformer date encoding and the 3D-LSTM recurrent layers in FP32; validation and prediction run in FP32.
+Supports both the whole-season strategy (trained and selected on full seasons) and the truncated-season strategy (per-epoch
+random cutoff truncation via truncation.CaseClock and checkpoint selection across five observation windows via dev_pack).
+Recipe: AdamW (learning rate 1e-3, weight decay 0.02), batch 2,048, gradient clipping at 1, at most 55 epochs with 10%
+linear warm-up and cosine decay, four validation checks per epoch plus one at the epoch end, patience 12 checks. Training
+uses BF16 autocast on GPU, with the Transformer date encoding and the 3D-LSTM recurrent layers in FP32; validation and
+prediction run in FP32.
 """
 import json
 import math
@@ -52,9 +53,14 @@ def mse_z(pred, p, idx, st):
     return float((((pred - y) / st['y'][1])[m] ** 2).mean()) if bool(m.any()) else float('nan')
 
 
-def train_model(arch, p, fit_idx, dev_idx, seed, recipe=RECIPE):
-    """Train one model; returns (model at its best check, standardisation statistics, history, best epoch)."""
+def train_model(arch, p, fit_idx, dev_idx, seed, recipe=RECIPE, trunc=None, dev_pack=None):
+    """Train one model; returns (model at its best check, standardisation statistics, history, best epoch).
+
+    When trunc (truncation.CaseClock) is given, each epoch truncates fit samples at per-field-season random cutoffs.
+    When dev_pack is given, validation runs on dev_pack[dev_idx] (e.g. all five observation windows of the dev split).
+    """
     dev = p.vals.device
+    p_dev = p if dev_pack is None else dev_pack
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     sel = torch.zeros(p.n, dtype=torch.bool, device=dev)
@@ -75,7 +81,7 @@ def train_model(arch, p, fit_idx, dev_idx, seed, recipe=RECIPE):
     step, stop = 0, False
 
     def check(kind):
-        v = mse_z(predict(model, p, dev_idx, st, batch_fn), p, dev_idx, st)
+        v = mse_z(predict(model, p_dev, dev_idx, st, batch_fn), p_dev, dev_idx, st)
         model.train()
         rec = dict(kind=kind, step=step, epoch=round(step / per_epoch, 4), dev_mse_z=v)
         if v < S['best'] - 1e-7:
@@ -90,9 +96,13 @@ def train_model(arch, p, fit_idx, dev_idx, seed, recipe=RECIPE):
 
     for ep in range(1, recipe['epochs'] + 1):
         model.train()
-        for pos, b_local in enumerate(D.bucket_batches(lengths, recipe['batch'], rng), 1):
+        pv, lengths_ep = p, lengths
+        if trunc is not None:
+            pv, _ = trunc.view(seed, ep)
+            lengths_ep = pv.s_len[fit_idx].cpu().numpy()
+        for pos, b_local in enumerate(D.bucket_batches(lengths_ep, recipe['batch'], rng), 1):
             idx = fit_idx[torch.from_numpy(b_local).to(dev)]
-            b = batch_fn(p, idx, st)
+            b = batch_fn(pv, idx, st)
             opt.zero_grad(set_to_none=True)
             with torch.autocast('cuda', dtype=torch.bfloat16, enabled=dev.type == 'cuda'):
                 pred = model(b)

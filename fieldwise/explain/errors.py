@@ -1,4 +1,4 @@
-"""Where the error sits and which correction removes it (manuscript Sections 4.5.1-4.5.2, Appendix C.1).
+"""Where the error sits and which correction removes it (manuscript Section 4.4, Appendix B.2, Fig. 7).
 
 Layers. With e = y - prediction over the labelled pixels of a case, the field-mean residual is x = mean(e) and the
 within-field variance v = mean((e - x)^2), so case MSE = x^2 + v. The field-mean residual splits into the weighted mean of
