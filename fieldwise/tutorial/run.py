@@ -18,8 +18,9 @@ import pandas as pd
 import torch
 
 from .. import bank as fb, calibration, decision, environment, readout, retrieval, rpt, selection, strength
-from ..base import data as BD, train as BT
+from ..base import data as BD, train as BT, truncation as TR
 from ..readout import b7_features
+from ..schedule import DAY_MS
 from . import model as model_io
 from .study import NAMED, Study
 from .synth import generate
@@ -29,9 +30,13 @@ QGROUPS = {'s2': ('q_s2_fixedgdd4__', 'q_s2_asof__'), 'weather': ('q_weather_fix
            'topo': ('q_topo__',)}
 
 
-def rolling_base(S, target_fit, gt_fit, cut, seeds, recipe, device, log, target, save_dir):
+def rolling_base(S, target_fit, gt_fit, cut, seeds, recipe, device, log, target, save_dir, strategy='truncated'):
     """{case_id: Base prediction of every service pixel (mean over seeds)} for every year after the first; the models of
-    the target year are saved to save_dir/seed_<n>."""
+    the target year are saved to save_dir/seed_<n>.
+
+    strategy='truncated' (manuscript primary): per-epoch random cutoff truncation on training field-seasons and five-window
+    checkpoint selection on the dev split. strategy='whole': full-season training and harvest-window checkpoint selection.
+    """
     C, H = S.cases, S.cases[S.cases.stage == 'harvest']
     pred = {}
     for T in sorted(C.year.unique())[1:]:
@@ -41,6 +46,17 @@ def rolling_base(S, target_fit, gt_fit, cut, seeds, recipe, device, log, target,
         t0 = time.time()
         p_tr = BD.PixelData(S.case_inputs(tr), S.soil, S.dem, target_fit, gt_fit, samples='gt', device=device)
         key = (tr.year.astype(str) + ':' + tr.fid.astype(str)).to_numpy()[p_tr.s_case.cpu().numpy()]
+        tr_fs_keys = set(tr.year.astype(str) + ':' + tr.fid.astype(str))
+        if strategy == 'truncated':
+            legal_all = C[(C.year < T) & (C.label_ms <= cut[T])].copy()
+            legal_all['fs_key'] = legal_all.year.astype(str) + ':' + legal_all.fid.astype(str)
+            legal_all = legal_all[legal_all.fs_key.isin(tr_fs_keys)].reset_index(drop=True)
+            lo_map = legal_all[legal_all.stage.isin(STAGES)].groupby('fs_key').window_end_ms.min()
+            tr_keys = (tr.year.astype(str) + ':' + tr.fid.astype(str)).to_numpy()
+            hi_ms = tr.window_end_ms.to_numpy(np.float64)
+            lo_ms = lo_map.reindex(tr_keys).to_numpy(np.float64)
+            lo_ms = np.where(np.isfinite(lo_ms), lo_ms, hi_ms)
+            lo_days, hi_days = (lo_ms // DAY_MS).astype(np.int64), (hi_ms // DAY_MS).astype(np.int64)
         q = C[C.year == T].reset_index(drop=True)
         p_q = BD.PixelData(S.case_inputs(q), S.soil, S.dem, target_fit, gt_fit, samples='all', device=device)
         out, runs = 0., []
@@ -48,7 +64,16 @@ def rolling_base(S, target_fit, gt_fit, cut, seeds, recipe, device, log, target,
             dev = BT.dev_split(key, 0.15, seed)
             is_dev = torch.from_numpy(np.isin(key, list(dev))).to(device)
             idx = torch.arange(p_tr.n, device=device)
-            model, st, hist, best = BT.train_model('transformer', p_tr, idx[~is_dev], idx[is_dev], seed, recipe)
+            fit_idx = idx[~is_dev]
+            if strategy == 'truncated':
+                clock = TR.CaseClock(p_tr, fit_idx, lo_days, hi_days, date_pad=BD.DATE_PAD)
+                dev_cases = legal_all[legal_all.fs_key.isin(dev)].reset_index(drop=True)
+                p_dev = BD.PixelData(S.case_inputs(dev_cases), S.soil, S.dem, target_fit, gt_fit, samples='gt', device=device)
+                dev_idx = torch.arange(p_dev.n, device=device)
+                model, st, hist, best = BT.train_model('transformer', p_tr, fit_idx, dev_idx, seed, recipe,
+                                                       trunc=clock, dev_pack=p_dev)
+            else:
+                model, st, hist, best = BT.train_model('transformer', p_tr, fit_idx, idx[is_dev], seed, recipe)
             out = out + BT.predict(model, p_q, torch.arange(p_q.n, device=device), st, BD.batch)
             if T == target:
                 BT.save(model, st, save_dir / f'seed_{seed}')
@@ -57,8 +82,8 @@ def rolling_base(S, target_fit, gt_fit, cut, seeds, recipe, device, log, target,
         s_case = p_q.s_case.cpu().numpy()
         for i, cid in enumerate(q.case_id):
             pred[cid] = yhat[s_case == i]
-        log[int(T)] = dict(train_field_seasons=len(tr), train_pixels=int(p_tr.n), query_cases=len(q), runs=runs,
-                           seconds=round(time.time() - t0, 1))
+        log[int(T)] = dict(strategy=strategy, train_field_seasons=len(tr), train_pixels=int(p_tr.n), query_cases=len(q),
+                           runs=runs, seconds=round(time.time() - t0, 1))
     return pred
 
 
@@ -87,14 +112,16 @@ def main():
     ap.add_argument('--out', type=Path, required=True)
     ap.add_argument('--seeds', type=int, nargs='+', default=[42])
     ap.add_argument('--epochs', type=int, default=BT.RECIPE['epochs'])
+    ap.add_argument('--strategy', choices=('truncated', 'whole'), default='truncated',
+                    help='Base training strategy: truncated (random cutoffs + five-window selection, default) or whole')
     ap.add_argument('--device', default='cuda' if torch.cuda.is_available() else 'cpu')
     ap.add_argument('--labels', type=Path, help='your yield maps instead of synthetic yields: npz with target [pixels] (t/ha) '
                                                'and gt_valid [pixels], in the pixel order of the seasons given')
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     t_all = time.time()
-    rec = dict(seasons=a.seasons, target=a.target, seeds=a.seeds, epochs=a.epochs, device=a.device, timing={},
-               labels=str(a.labels) if a.labels else 'synthetic')
+    rec = dict(seasons=a.seasons, target=a.target, seeds=a.seeds, epochs=a.epochs, strategy=a.strategy, device=a.device,
+               timing={}, labels=str(a.labels) if a.labels else 'synthetic')
     S = Study(a.seasons)
     C = S.cases
 
@@ -123,7 +150,8 @@ def main():
     t0 = time.time()
     rec['base'] = {}
     recipe = dict(BT.RECIPE, epochs=a.epochs)
-    pred = rolling_base(S, target_fit, gt_fit, cut, a.seeds, recipe, a.device, rec['base'], a.target, a.out / 'model/base')
+    pred = rolling_base(S, target_fit, gt_fit, cut, a.seeds, recipe, a.device, rec['base'], a.target, a.out / 'model/base',
+                        strategy=a.strategy)
     rec['timing']['base'] = round(time.time() - t0, 1)
 
     # 2. RPT database: residual bank of the in-season cases with out-of-sample predictions, references, embeddings, geometry
@@ -178,8 +206,7 @@ def main():
         r, models = readout.readouts(X, b7, means, np.full(len(X), 2), X.rbar.to_numpy(), cutoff=cut)
         rh.append(r)
         ro_models[fm] = {s: m for (s, T), m in models.items() if T == a.target}
-    with np.errstate(all='ignore'):
-        rhat = np.nanmean(np.column_stack(rh), 1)
+    rhat = readout.mean_readout(np.column_stack(rh))
     ok = (X.n > 0).to_numpy()
     choice, _ = strength.select_strengths(lab, m6[ok], G[ok], Cal[ok], cutoff=cut, targets=years)
     gamma, beta, kappa = (X.year.map({T: v[i] for T, v in choice.items()}).to_numpy(float) for i in range(3))

@@ -1,4 +1,4 @@
-"""Decision comparisons and failure diagnostics (manuscript Sections 4.7.2 and 4.8, Appendix D.3).
+"""Decision comparisons and failure diagnostics (manuscript Section 4.7, Appendix B.2, Fig. 12).
 
 Fixed fractions. Base + beta S15 + lambda c applies the same fraction lambda of the Correction-only offset c to every case
 (lambda = 0 keeps RPT only, lambda = 1 is Correction only). Case MSE is quadratic in lambda and exact from per-case sums.

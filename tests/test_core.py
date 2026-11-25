@@ -1,10 +1,11 @@
 """Unit tests of the correction components on small synthetic data."""
 import unittest
+import warnings
 
 import numpy as np
 import pandas as pd
 
-from fieldwise import bank, decision, environment, retrieval, selection, strength
+from fieldwise import bank, decision, environment, readout, retrieval, selection, strength
 from fieldwise.linalg import ridge_path, ridge_two_block
 
 
@@ -180,6 +181,16 @@ class TestDecision(unittest.TestCase):
         m = np.array([100, r.sum(), (r * r).sum(), S.sum(), (r * S).sum(), (S * S).sum()])
         u, beta = 0.3, 0.5
         self.assertAlmostEqual(float(strength.shift_loss(m, u, beta)), float(((r - u - beta * S) ** 2).mean()), places=10)
+
+
+class TestReadout(unittest.TestCase):
+    def test_mean_readout_over_finite_models(self):
+        R = np.array([[1., 3., np.nan], [np.nan, np.nan, np.nan], [2., 2., 5.]])
+        with warnings.catch_warnings():
+            warnings.simplefilter('error')                           # a case without readouts gives NaN, no warning
+            m = readout.mean_readout(R)
+        np.testing.assert_array_equal(m[[0, 2]], np.nanmean(R[[0, 2]], 1))
+        self.assertTrue(np.isnan(m[1]))
 
 
 if __name__ == '__main__':

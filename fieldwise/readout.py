@@ -142,6 +142,13 @@ def readouts(cases, b7, means, dslot, rbar, cutoff=None):
     return rhat, models
 
 
+def mean_readout(R):
+    """Mean of the foundation-model readouts per case (rows of R) over the finite ones; NaN for a case without any."""
+    R = np.asarray(R, dtype=np.float64)
+    k = np.isfinite(R).sum(1)
+    return np.where(k > 0, np.nansum(R, 1) / np.maximum(k, 1), np.nan)
+
+
 def b7_features(p_mean, p_sd, log_n, G, Cal):
     """The seven Base-derived readout features: Base mean, standard deviation, log pixel count, G, Cal (missing -> 0), flags."""
     return np.column_stack([p_mean, p_sd, log_n, np.nan_to_num(G), np.nan_to_num(Cal), np.isnan(G).astype(float),

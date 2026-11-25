@@ -1,4 +1,4 @@
-"""Spatial assessment of within-field predictions (manuscript Section 4.5.3, Appendix C.1).
+"""Spatial assessment and within-field mechanism tests (manuscript Section 4.5, Appendix B.2, Figs. 8–9).
 
 Edge contrast. Distances run from pixel centres to the boundary of the field's service-pixel footprint. A case's contrast
 is the mean over valid pixels 10 <= d < 20 m minus the mean over d >= 40 m, for observed yield or a prediction; its
@@ -7,8 +7,12 @@ contrast error is |contrast(prediction) - contrast(observed)|. Cases need valid 
 Within-field response. Per case, the slope of the prediction on observed yield, Cov(y, prediction) / Var(y), over valid
 pixels; cases without observed variance are left out.
 
+Within-field mechanism tests (Fig. 9). shuffle_residuals() permutes residuals within each reference field to test pixel
+matching; reconstruct_ridge() and retained_benefit() project an RPT correction onto named spectral/temporal descriptors
+and compute reconstruction R^2 and retained within-field MSE benefit rho (Appendix B.2, Eq. B.6).
+
 Intervals resample whole clusters (fields or coordinate-matched land groups) with all their seasons and decision times,
-and recompute the evaluation weights in every draw (cluster_weights).
+and recompute the evaluation weights in every draw (cluster_weights; manuscript uses draws=100_000).
 """
 import numpy as np
 import pandas as pd
@@ -99,3 +103,68 @@ def weighted(V, x):
     x = np.asarray(x, float)
     ok = np.isfinite(x)
     return (V[:, ok] @ x[ok]) / V[:, ok].sum(1)
+
+
+def shuffle_residuals(r, valid, case, rng):
+    """Permute labelled pixel residuals within each case (manuscript Section 4.5, Fig. 9A pixel-matching ablation).
+
+    Preserves every case's residual distribution and field mean while breaking pixel-to-pixel correspondence.
+    """
+    r = np.asarray(r, float).copy()
+    valid = np.asarray(valid, bool)
+    case = np.asarray(case, np.int64)
+    idx = np.flatnonzero(valid)
+    if not len(idx):
+        return r
+    c = case[idx]
+    # Vectorised within-case permutation via random tie-breaking keys sorted by (case, uniform).
+    order_orig = np.argsort(c, kind='mergesort')
+    order_perm = np.lexsort((rng.random(len(idx)), c))
+    r[idx[order_orig]] = r[idx[order_perm]]
+    return r
+
+
+def reconstruct_ridge(X_fit, y_fit, X_eval, alpha=1.0):
+    """Standardised ridge reconstruction of a within-field correction surface from pixel descriptors (Fig. 9C)."""
+    Xf = np.asarray(X_fit, float)
+    yf = np.asarray(y_fit, float)
+    Xe = np.asarray(X_eval, float)
+    mu = Xf.mean(axis=0)
+    sd = Xf.std(axis=0)
+    sd = np.where(sd > 1e-8, sd, 1.0)
+    Zf = (Xf - mu) / sd
+    Ze = (Xe - mu) / sd
+    ym = float(yf.mean())
+    A = Zf.T @ Zf + float(alpha) * np.eye(Zf.shape[1])
+    w = np.linalg.solve(A, Zf.T @ (yf - ym))
+    return ym + Ze @ w
+
+
+def retained_benefit(r_centered, s_orig, s_recon, valid, case, weights):
+    """Reconstruction R^2 and retained within-field MSE benefit rho (Appendix B.2, Eq. B.6; Fig. 9C).
+
+    r_centered: pixel residuals minus their case mean on valid pixels.
+    s_orig, s_recon: original and reconstructed within-field corrections (both centred per case).
+    weights: [n_cases] non-negative case weights (e.g. evaluation.case_weights).
+    """
+    r = np.asarray(r_centered, float)
+    s0 = np.asarray(s_orig, float)
+    sr = np.asarray(s_recon, float)
+    v = np.asarray(valid, bool)
+    c = np.asarray(case, np.int64)
+    w = np.asarray(weights, float)
+    n_cases = len(w)
+    # Within-case MSE reductions and reconstruction variance
+    d0, n = _case_mean(r * r - (r - s0) ** 2, v, c, n_cases)
+    dr, _ = _case_mean(r * r - (r - sr) ** 2, v, c, n_cases)
+    err_rec, _ = _case_mean((s0 - sr) ** 2, v, c, n_cases)
+    var_s0, _ = _case_mean(s0 * s0, v, c, n_cases)
+    ok = (n > 0) & np.isfinite(d0) & np.isfinite(dr) & (w > 0)
+    wn = w[ok] / w[ok].sum()
+    gain_orig = float(wn @ d0[ok])
+    gain_recon = float(wn @ dr[ok])
+    denom_var = float(wn @ var_s0[ok])
+    r2_rec = float(1.0 - (wn @ err_rec[ok]) / denom_var) if denom_var > 0 else np.nan
+    rho = float(gain_recon / gain_orig) if abs(gain_orig) > 1e-12 else np.nan
+    return dict(r2_rec=r2_rec, retained_share=rho, gain_orig=gain_orig, gain_recon=gain_recon)
+
