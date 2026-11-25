@@ -7,7 +7,7 @@ already available by the decision time.**
 This repository provides (1) a direct Python API (`fieldwise.correct_pixels`) for applying FieldWise to **any
 pixel-level dataset**, (2) the full Base training and Earth-observation pipeline (supporting both **truncated-season**
 and **whole-season** training), and (3) the **explainability and decision-value diagnostics** (`fieldwise.explain`)
-reported in the FieldWise manuscript (Chan and Yang, under review).
+accompanying the FieldWise manuscript (in preparation).
 
 ![Fig. 1 of the manuscript](docs/images/figure1.png)
 
@@ -75,18 +75,19 @@ print("Selected strengths per year:", res.choices)
 
 ## Explainability and decision diagnostics
 
-`fieldwise/explain/` implements the scale decomposition, explanation fidelity tests and decision-value diagnostics from
-manuscript Sections 4.4–4.7 and Figs. 7–12:
+`fieldwise/explain/` provides building blocks for the scale decomposition, explanation fidelity tests and
+decision-value diagnostics in manuscript Sections 4.4–4.7 and Figs. 7–12 (descriptor matrices are supplied by the
+caller):
 
 | Manuscript analysis | What it tests | Module / functions |
 |---|---|---|
-| Error layers & Shapley contributions (Fig. 7) | Exact decomposition of MSE into year-stage, region, field and within-field layers; exact Shapley split of RPT, G and K | `fieldwise/explain/errors.py` (`Layers`, `correction_contributions`) |
+| Spatial-scale error layers & sequential increments (Fig. 7, Table 1) | Additive decomposition of MSE into within-field, remaining between-field and group-shared bias layers; sequential and component contributions | `fieldwise/explain/errors.py` (`Layers`, `correction_states`, `correction_contributions`) |
 | Spatial fidelity: edge contrast & slope (Fig. 8) | Boundary-distance contrast error (10–20 m vs. ≥ 40 m) and within-field response slope with cluster bootstrap | `fieldwise/explain/spatial.py` (`boundary_distance`, `edge_contrast`, `response_slope`, `cluster_weights`) |
-| Within-field mechanism & reconstruction (Fig. 9) | Pixel-matching shuffle ablation, LEACE concept erasure with matched random controls, and 23-descriptor ridge reconstruction (R² and retained benefit ρ) | `fieldwise/explain/spatial.py` (`shuffle_residuals`, `reconstruct_ridge`, `retained_benefit`), `fieldwise/explain/erasure.py` |
-| Foundation-model readout increments (Fig. 10) | Predictive increments over shared features and named agronomic descriptors (adding, matching, revising) | `fieldwise/explain/increments.py` (`fit_blocks`) |
-| Field-wide LEACE concept erasure (Fig. 11) | Frozen vs. refitted readout sensitivity to named concepts against matched random subspaces | `fieldwise/explain/erasure.py` (`fit_erasers`, `leace`) |
-| Decision value & failure modes (Fig. 12) | Fixed-fraction comparisons, readout permutation, beneficial / overshoot / wrong-direction split and severe-harm risk | `fieldwise/explain/decisions.py` (`fraction_losses`, `permuted_readouts`, `loss_change`) |
-| Per-pixel attribution breakdown | Exact additive decomposition of a served prediction into Base, reference-field contributions and field-wide components | `fieldwise/explain/inference.py` |
+| Within-field mechanism & reconstruction (Fig. 9) | Pixel-matching shuffle ablation, LEACE concept erasure with matched random controls, and ridge reconstruction from caller-supplied descriptors (R² and retained benefit) | `fieldwise/explain/spatial.py` (`shuffle_residuals`, `reconstruct_ridge`, `retained_benefit`), `fieldwise/explain/erasure.py` (`fit_erasers`, `leace`) |
+| Direct field-mean correction (Fig. 10) | Direct application of field-mean residual estimates before the decision layer, predictive skill and supplementary readout increments | `fieldwise/explain/decisions.py` (`readout_skill`, `loss_change`), `fieldwise/explain/increments.py` (`fit_blocks`) |
+| Field-specific residual pairing (Fig. 11) | Within-country–year–stage permutation of field-mean residual estimates to test own-field pairing value | `fieldwise/explain/decisions.py` (`permuted_readouts`, `permutation_groups`, `permutation_losses`) |
+| Decision-layer accuracy & severe-harm risk (Fig. 12, Table 2) | Revising the field-wide offset vs. *Correction only*, severe-harm rate (> 1.1 × Base MSE) and fixed-fraction baselines | `fieldwise/explain/decisions.py` (`layer_offsets`, `fraction_losses`, `loss_change`) |
+| Per-pixel attribution & supplementary erasure | Exact additive breakdown of served predictions and supplementary field-wide readout erasure | `fieldwise/explain/inference.py`, `fieldwise/explain/erasure.py` (`readout_erasure`) |
 
 ## Quick start (end-to-end tutorial)
 
@@ -162,7 +163,7 @@ Table formats and the timing rules that keep every fit to information available 
 ## Citation, data and licences
 
 - **Paper:** *FieldWise: Two-scale post-hoc residual correction, explanation fidelity, and decision value in preharvest
-  subfield yield forecasting* (Chan and Yang), under review; its citation will be added upon publication. To cite the
+  subfield yield forecasting* (manuscript in preparation; full citation will be added upon publication). To cite the
   software, see `CITATION.cff`.
 - **Data:** the manuscript's experiments use YieldSAT (Miranda et al., 2026), available from DFKI at
   https://yieldsat.github.io/.
