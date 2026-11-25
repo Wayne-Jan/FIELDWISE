@@ -167,12 +167,16 @@ def correct_pixels(
     device=None,
     seed=0,
 ):
-    """Run strictly causal rolling FieldWise correction directly on pixel-level data.
+    """Run rolling temporal FieldWise correction directly on single-crop pixel-level data.
+
+    Call separately for each crop (reference retrieval searches all rows in ``pixels`` matching the stage). Pass
+    explicit ``decision_ms`` and ``label_ms`` columns whenever real dates are known; omitting them falls back to
+    synthetic year-based timestamps (mid-year decision, end-of-year label).
 
     For each target year after the earliest year, learns RPT (within-field transfer), linear calibration (and optional
-    environment offset G + decision readout rhat) strictly from earlier labelled years, selects component strengths by
-    forward selection on historical years, and returns pixel-level Base, Correction-only and FieldWise predictions
-    aligned with the input pixels row order.
+    environment offset G + decision readout rhat) only from earlier labelled years whose harvest labels are available
+    by the decision time, selects component strengths by forward selection on historical years, and returns pixel-level
+    Base, Correction-only and FieldWise predictions aligned with the input pixels row order.
     """
     if device is None:
         device = 'cuda' if torch.cuda.is_available() else 'cpu'

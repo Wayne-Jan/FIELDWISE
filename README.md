@@ -69,9 +69,10 @@ print(res.pixels[["case_id", "pred_base", "within_field", "field_offset", "pred_
 print("Selected strengths per year:", res.choices)
 ```
 
-> **Temporal-legality guarantee:** Target year `T` only ever uses labelled reference fields from years `< T` whose
-> harvest labels are available by the decision time (enforced by `fieldwise/selection.py` and verified by
-> `tests/test_pipeline.py` and `tests/test_leakage.py`).
+> **Usage notes & temporal-legality guarantee:**
+> - **One crop per call:** `correct_pixels` retrieves reference fields across all rows in `pixels` within each stage, so datasets with multiple crops should call `correct_pixels` separately per crop.
+> - **Explicit timestamps:** Pass actual `decision_ms` and `label_ms` columns whenever available; if omitted, the API falls back to synthetic year-based timestamps (mid-year decision, end-of-year label).
+> - **No target-year leakage:** Target year `T` only ever uses labelled reference fields from years `< T` whose harvest labels are available by the decision time (enforced by `fieldwise/selection.py` and verified by `tests/test_pipeline.py` and `tests/test_leakage.py`).
 
 ## Explainability and decision diagnostics
 
